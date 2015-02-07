@@ -55,6 +55,50 @@ func (g *Commands) Pull() (err error) {
 	return
 }
 
+func (g *Commands) PullByMatch() error {
+	fmt.Println("matches", g.opts.Sources)
+	remoteMatches, err := g.rem.FindMatches(g.opts.Path, g.opts.Sources, false)
+	if err != nil {
+		return err
+	}
+
+	p := g.opts.Path
+	if p == "/" {
+		p = ""
+	}
+	localChildren, err := list(g.context, g.opts.Path, g.opts.Hidden)
+
+	if err != nil {
+		return err
+	}
+
+	for match := range remoteMatches {
+		if match == nil {
+			continue
+		}
+
+		fmt.Println(match.Name)
+	}
+
+	dirlist := merge(remoteMatches, localChildren)
+	if len(dirlist) < 1 {
+		return fmt.Errorf("no matches found!")
+	}
+
+	for _, dl := range dirlist {
+		fmt.Println(dl.remote)
+	}
+	fmt.Println("TODO: Add change resolution")
+
+	/*
+		ok := printChangeList(cl, g.opts.NoPrompt, false)
+		if ok {
+			return g.playPullChangeList(cl, g.opts.Exports)
+		}
+	*/
+	return nil
+}
+
 func (g *Commands) playPullChangeList(cl []*Change, exports []string) (err error) {
 	var next []*Change
 	g.taskStart(len(cl))

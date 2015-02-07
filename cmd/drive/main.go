@@ -224,6 +224,7 @@ type pullCmd struct {
 	export         *string
 	force          *bool
 	hidden         *bool
+	matches        *bool
 	noPrompt       *bool
 	noClobber      *bool
 	recursive      *bool
@@ -238,8 +239,9 @@ func (cmd *pullCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	cmd.noPrompt = fs.Bool("no-prompt", false, "shows no prompt before applying the pull action")
 	cmd.hidden = fs.Bool("hidden", false, "allows pulling of hidden paths")
 	cmd.force = fs.Bool("force", false, "forces a pull even if no changes present")
-	cmd.ignoreChecksum = fs.Bool(drive.CLIOptionIgnoreChecksum, false, drive.DescIgnoreChecksum)
 	cmd.exportsDir = fs.String("export-dir", "", "directory to place exports")
+	cmd.ignoreChecksum = fs.Bool(drive.CLIOptionIgnoreChecksum, false, drive.DescIgnoreChecksum)
+	cmd.matches = fs.Bool("matches", false, "wild card search and trash")
 
 	return fs
 }
@@ -254,12 +256,23 @@ func nonEmptyStrings(v []string) (splits []string) {
 }
 
 func (cmd *pullCmd) Run(args []string) {
-	sources, context, path := preprocessArgs(args)
+	var path string
+	var sources []string
+	var context *config.Context
+
+	if *cmd.matches {
+		sources = args
+		cwd, cErr := os.Getwd()
+		exitWithError(cErr)
+		_, context, path = preprocessArgs([]string{cwd})
+	} else {
+		sources, context, path = preprocessArgs(args)
+	}
 
 	// Filter out empty strings.
-	exports := nonEmptyStrings(strings.Split(*cmd.export, ","))
+	exports := uniqOrderedStr(nonEmptyStrings(strings.Split(*cmd.export, ",")))
 
-	exitWithError(drive.New(context, &drive.Options{
+	driveInstance := drive.New(context, &drive.Options{
 		Exports:        uniqOrderedStr(exports),
 		ExportsDir:     strings.Trim(*cmd.exportsDir, " "),
 		Force:          *cmd.force,
@@ -270,7 +283,13 @@ func (cmd *pullCmd) Run(args []string) {
 		Path:           path,
 		Recursive:      *cmd.recursive,
 		Sources:        sources,
-	}).Pull())
+	})
+
+	f := driveInstance.Pull
+	if *cmd.matches {
+		f = driveInstance.PullByMatch
+	}
+	exitWithError(f())
 }
 
 type pushCmd struct {
